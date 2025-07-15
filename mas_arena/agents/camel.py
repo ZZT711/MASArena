@@ -1,7 +1,7 @@
 """
-LangChain多智能体系统
+LangChain Multi-Agent System
 
-本模块基于LangChain框架实现多智能体系统，使用自定义智能体协作解决问题，替代原CAMEL框架。
+This module implements a multi-agent system based on the LangChain framework, using custom agents to collaboratively solve problems, replacing the original CAMEL framework.
 """
 
 import os
@@ -20,7 +20,7 @@ from langchain.schema import BaseMessage, SystemMessage, HumanMessage, AIMessage
 from langchain.callbacks.openai_info import OpenAICallbackHandler
 from mas_arena.agents.base import AgentSystem, AgentSystemRegistry
 
-# 加载环境变量
+# Load environment variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -220,44 +220,44 @@ Please analyze the above discussions and provide a final answer. Requirements:
 
 class Camel_Mas(AgentSystem):
     """
-    LangChain多智能体系统
+    LangChain Multi-Agent System
 
-    该智能体系统使用LangChain框架中的多个智能体协作解决问题，包括任务指定、任务规划、执行和评估。
+    This agent system uses multiple agents from the LangChain framework to collaboratively solve problems, including task specification, planning, execution, and evaluation.
     """
 
     def __init__(self, name: str = "camel_mas", config: Dict[str, Any] = None):
-        """初始化LangChain多智能体系统"""
+        """Initialize the LangChain Multi-Agent System"""
         super().__init__(name, config)
         self.config = config or {}
         
-        # 提取配置参数
-        self.assistant_role_name = self.config.get("assistant_role_name", "助手")
-        self.user_role_name = self.config.get("user_role_name", "用户")
-        self.critic_role_name = self.config.get("critic_role_name", "批评者")
+        # Extract configuration parameters
+        self.assistant_role_name = self.config.get("assistant_role_name", "Assistant")
+        self.user_role_name = self.config.get("user_role_name", "User")
+        self.critic_role_name = self.config.get("critic_role_name", "Critic")
         self.task_type = self.config.get("task_type", "AI_SOCIETY")
-        self.output_language = self.config.get("output_language", "中文")
+        self.output_language = self.config.get("output_language", "English")
         self.model_name = self.config.get("model_name") or os.getenv("MODEL_NAME", "gpt-4o")
         
-        # API配置
+        # API configuration
         self.api_key = os.getenv("OPENAI_API_KEY", "sk-nhgJRZ0BQsKljo9ZOOcS4qlKejpptHpStgXjnpCLmmbb63pS")
         self.base_url = os.getenv("OPENAI_API_BASE", "https://35.aigcbest.top/v1")
-        logger.info(f"使用API密钥: {self.api_key[:8]}... 端点: {self.base_url}")
+        logger.info(f"Using API key: {self.api_key[:8]}... Endpoint: {self.base_url}")
 
-        # 初始化OpenAI客户端（异步）
+        # Initialize OpenAI client (asynchronous)
         try:
             self.client = AsyncOpenAI(
                 api_key=self.api_key,
                 base_url=self.base_url
             )
-            logger.info("AsyncOpenAI客户端初始化成功")
+            logger.info("AsyncOpenAI client initialized successfully")
         except Exception as e:
-            logger.error(f"初始化AsyncOpenAI客户端失败: {str(e)}")
+            logger.error(f"Failed to initialize AsyncOpenAI client: {str(e)}")
             raise
 
-        # 初始化智能体
+        # Initialize agents
         self._initialize_agents()
 
-        # 为工具集成暴露LLM实例
+        # Expose LLM instance for tool integration
         self.llm = ChatOpenAI(
             model=self.model_name,
             api_key=self.api_key,
@@ -269,42 +269,42 @@ class Camel_Mas(AgentSystem):
         ]
 
     def _initialize_agents(self):
-        """初始化系统中使用的所有智能体"""
+        """Initialize all agents used in the system"""
         self.task_specify_agent = Agent(
             agent_id="task_specify",
             name="TaskSpecifier",
             model_name=self.model_name,
-            system_prompt=f"你是一个任务指定智能体。根据以下问题描述，明确具体任务，使用{self.output_language}。任务应清晰、具体、可执行。"
+            system_prompt=f"You are a task specification agent. Based on the following problem description, specify a clear, specific, and executable task, using {self.output_language}."
         )
         self.task_planner_agent = Agent(
             agent_id="task_planner",
             name="TaskPlanner",
             model_name=self.model_name,
-            system_prompt=f"你是一个任务规划智能体。为以下任务制定详细的子任务计划，使用{self.output_language}。列出具体步骤。"
+            system_prompt=f"You are a task planning agent. Create a detailed sub-task plan for the following task, using {self.output_language}. List specific steps."
         )
         self.assistant_agent = Agent(
             agent_id="assistant",
             name=self.assistant_role_name,
             model_name=self.model_name,
-            system_prompt=f"你是一个{self.assistant_role_name}，协助{self.user_role_name}完成任务。你的目标是提供准确、清晰的回答，使用{self.output_language}。"
+            system_prompt=f"You are an {self.assistant_role_name}, assisting the {self.user_role_name} to complete tasks. Your goal is to provide accurate and clear responses, using {self.output_language}."
         )
         self.user_agent = Agent(
             agent_id="user",
             name=self.user_role_name,
             model_name=self.model_name,
-            system_prompt=f"你是{self.user_role_name}，与{self.assistant_role_name}协作完成任务。提出问题或响应助手，使用{self.output_language}。"
+            system_prompt=f"You are the {self.user_role_name}, collaborating with the {self.assistant_role_name} to complete tasks. Ask questions or respond to the assistant, using {self.output_language}."
         )
         self.critic_agent = Agent(
             agent_id="critic",
             name=self.critic_role_name,
             model_name=self.model_name,
-            system_prompt=f"你是{self.critic_role_name}，负责评估任务结果，提供建设性反馈。基于执行结果进行逻辑推理，生成四个具体的多选选项（A、B、C、D），每个选项必须严格匹配题目提供的选项（例如‘Yes’或‘No’），并选择最合理的答案。使用{self.output_language}。格式为：\nA. [选项内容]\nB. [选项内容]\nC. [选项内容]\nD. [选项内容]\n答案：[选中的选项]"
+            system_prompt=f"You are the {self.critic_role_name}, responsible for evaluating task results and providing constructive feedback. Perform logical reasoning based on the execution results, generate four specific multiple-choice options (A, B, C, D), each option must strictly match the options provided in the problem (e.g., 'Yes' or 'No'), and select the most reasonable answer. Use {self.output_language}. Format: \nA. [Option content]\nB. [Option content]\nC. [Option content]\nD. [Option content]\nAnswer: [Selected option]"
         )
         self.result_extractor = ResultExtractor(
             model_name=self.model_name,
             format_prompt=self._get_format_prompt()
         )
-        logger.info("所有智能体初始化成功")
+        logger.info("All agents initialized successfully")
 
     def _get_format_prompt(self) -> str:
         """Retrieve the BBH format prompt for web of lies problems"""
@@ -326,31 +326,31 @@ class Camel_Mas(AgentSystem):
 
     async def run_agent(self, problem: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """
-        在给定问题上运行多智能体系统。
+        Run the multi-agent system on the given problem.
         
         Args:
-            problem: 包含问题数据的字典
+            problem: Dictionary containing problem data
             
         Returns:
-            包含消息和使用元数据的运行结果字典
+            Dictionary containing the run results with messages and usage metadata
         """
         problem_text = problem["problem"]
         problem_id = problem.get("id", "unknown")
-        logger.info(f"处理问题ID: {problem_id}, 问题: {problem_text}")
+        logger.info(f"Processing problem ID: {problem_id}, Problem: {problem_text}")
 
-        # 步骤1: 任务指定
+        # Step 1: Task Specification
         specified_task = await self._specify_task(problem_text)
 
-        # 步骤2: 任务规划
+        # Step 2: Task Planning
         planned_tasks = await self._plan_tasks(specified_task)
 
-        # 步骤3: 通过聊天智能体执行任务
+        # Step 3: Execute tasks using chat agents
         execution_result = await self._execute_tasks(planned_tasks)
 
-        # 步骤4: 使用批评者智能体评估结果
+        # Step 4: Evaluate results using critic agent
         critic_result = await self._evaluate_result(execution_result)
 
-        # 步骤5: 提取最终答案
+        # Step 5: Extract final answer
         all_histories = [
             self.task_specify_agent.chat_history,
             self.task_planner_agent.chat_history,
@@ -360,7 +360,7 @@ class Camel_Mas(AgentSystem):
         ]
         final_result = await self.result_extractor.extract(all_histories, problem_text)
 
-        # 格式化最终消息
+        # Format final message
         with contextlib.suppress(UnicodeDecodeError):
             final_answer = final_result["message"].content.encode('utf-8').decode('utf-8-sig')
 
@@ -372,7 +372,7 @@ class Camel_Mas(AgentSystem):
             'usage_metadata': final_result["message"].usage_metadata
         }
 
-        # 记录智能体响应
+        # Record agent responses
         self._record_agent_responses(problem_id, [ai_message])
 
         return {
@@ -381,44 +381,43 @@ class Camel_Mas(AgentSystem):
         }
 
     async def _specify_task(self, problem_text: str) -> str:
-        """使用TaskSpecifyAgent根据问题指定任务"""
+        """Use TaskSpecifyAgent to specify tasks based on the problem"""
         try:
             result = await self.task_specify_agent.generate_response(problem_text)
-            logger.info("任务指定成功")
+            logger.info("Task specification successful")
             return result["solution"]
         except Exception as e:
-            logger.error(f"任务指定失败: {str(e)}")
+            logger.error(f"Task specification failed: {str(e)}")
             raise
 
     async def _plan_tasks(self, specified_task: str) -> List[str]:
-        """使用TaskPlannerAgent规划子任务"""
+        """Use TaskPlannerAgent to plan subtasks"""
         try:
             result = await self.task_planner_agent.generate_response(specified_task)
-            logger.info("任务规划成功")
+            logger.info("Task planning successful")
             return result["solution"].split('\n')
         except Exception as e:
-            logger.error(f"任务规划失败: {str(e)}")
+            logger.error(f"Task planning failed: {str(e)}")
             raise
 
     async def _execute_tasks(self, tasks: List[str]) -> str:
-        """使用ChatAgents执行规划任务"""
+        """Execute planned tasks using ChatAgents"""
         execution_result = ""
         for task in tasks:
-            init_msg = f"让我们开始这个任务: {task}"
+            init_msg = f"Let's start this task: {task}"
             user_response = await self.user_agent.generate_response(init_msg)
             assistant_response = await self.assistant_agent.generate_response(user_response["solution"])
             execution_result += assistant_response["solution"] + "\n"
         return execution_result.strip()
 
     async def _evaluate_result(self, execution_result: str) -> str:
-        """使用CriticAgent评估执行结果并生成多选选项"""
+        """Use CriticAgent to evaluate execution results and generate multiple-choice options"""
         result = await self.critic_agent.generate_response(execution_result)
         return result["solution"]
 
     def _record_agent_responses(self, problem_id: str, messages: List[Dict[str, Any]]):
-        """记录智能体响应以便日志记录或进一步处理"""
+        """Record agent responses for logging or further processing"""
         pass
 
-# 注册智能体系统
+# Register the agent system
 AgentSystemRegistry.register("camel_mas", Camel_Mas)
-
