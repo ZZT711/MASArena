@@ -59,13 +59,14 @@ class EvaluationResult:
 class DatasetLoader:
     """Unified Dataset Loader"""
     
+    BASE_DIR = Path(__file__).parent
     DATASET_PATHS = {
-        'math': 'dataset/math_test.jsonl',
-        'aime': 'dataset/aime_test.jsonl', 
-        'bbh': 'dataset/bbh_test.jsonl',
-        'drop': 'dataset/drop_test.jsonl',
-        'humaneval': 'dataset/humaneval_test.jsonl',
-        'mmlu_pro': 'dataset/mmlu_pro_test.jsonl'
+        'math': str(BASE_DIR / 'dataset' / 'math_test.jsonl'),
+        'aime': str(BASE_DIR / 'dataset' / 'aime_test.jsonl'),
+        'bbh': str(BASE_DIR / 'dataset' / 'bbh_test.jsonl'),
+        'drop': str(BASE_DIR / 'dataset' / 'drop_test.jsonl'),
+        'humaneval': str(BASE_DIR / 'dataset' / 'humaneval_test.jsonl'),
+        'mmlu_pro': str(BASE_DIR / 'dataset' / 'mmlu_pro_test.jsonl'),
     }
     
     @classmethod
@@ -158,7 +159,7 @@ class MathUnifiedEvaluator(MathEvaluator):
             print('item_id:', item.get('id', ''),
                 'question:', input_text,
                 'ground_truth:', self.extract_answer(item.get("solution", "")),
-                'predicted_answer:', evaluation_details.get('extracted_answer', ''),
+                'extracted_answer:', evaluation_details.get('extracted_answer', ''),
                 'full_response:', run_result.get("response", ""),
                 'correct:', is_correct,
                 'evaluation_time:', time.time() - start_time,
@@ -230,7 +231,9 @@ class BBHUnifiedEvaluator(BBHEvaluator):
             run_result = {"final_answer": str(result)}
         
         # Use parent class's evaluate method
-        return super().evaluate(processed_item, run_result)
+        evaluation_details = super().evaluate(processed_item, run_result)
+        evaluation_details['correct'] = evaluation_details.get('score', 0) > 0.7
+        return evaluation_details
 
 
 class DROPUnifiedEvaluator(DROPEvaluator):
@@ -301,7 +304,7 @@ class DROPUnifiedEvaluator(DROPEvaluator):
                 'item_id': item.get('id', ''),
                 'question': input_text,
                 'ground_truth': processed_item.get("solution", ""),
-                'predicted_answer': evaluation_details.get('extracted_answer', ''),
+                'extracted_answer': evaluation_details.get('extracted_answer', ''),
                 'full_response': run_result.get("final_answer", ""),
                 'correct': is_correct,
                 'evaluation_time': time.time() - start_time,
@@ -360,7 +363,9 @@ class HumanEvalUnifiedEvaluator(HumanEvalEvaluator):
             run_result = {"final_answer": str(result)}
         
         # Use parent class's evaluate method
-        return super().evaluate(processed_item, run_result)
+        evaluation_details = super().evaluate(processed_item, run_result)
+        evaluation_details['correct'] = evaluation_details.get('score', 0) > 0.7
+        return evaluation_details
 
 
 class MMLU_ProUnifiedEvaluator(MMLU_ProEvaluator):
@@ -425,7 +430,9 @@ class MMLU_ProUnifiedEvaluator(MMLU_ProEvaluator):
             run_result = {"final_answer": result.get("response", "")}
         
         # Use parent class's evaluate method
-        return super().evaluate(processed_item, run_result)
+        evaluation_details = super().evaluate(processed_item, run_result)
+        evaluation_details['correct'] = evaluation_details.get('score', 0) > 0.7
+        return evaluation_details
 
 
 class AIMEUnifiedEvaluator(AIMEEvaluator):
@@ -466,7 +473,7 @@ class AIMEUnifiedEvaluator(AIMEEvaluator):
                 'item_id': item.get('id', ''),
                 'question': input_text,
                 'ground_truth': item.get("answer", ""),
-                'predicted_answer': evaluation_details.get('extracted_answer', ''),
+                'extracted_answer': evaluation_details.get('extracted_answer', ''),
                 'full_response': run_result.get("response", ""),
                 'correct': is_correct,
                 'evaluation_time': time.time() - start_time,
@@ -603,10 +610,9 @@ class EvaluationManager:
                 print("result:", result)
                 print('=' * 50)
                 predicted_answer = result.get('extracted_answer', 'N/A')
-                if config.dataset_name == 'math':
-                    is_correct = result.get('correct', False)
-                else:
-                    is_correct = result.get('score', 0) >= 0.7
+               
+                is_correct = result.get('correct', False)
+
                    
                 
                 print(f"Output answer: {predicted_answer}")

@@ -27,7 +27,7 @@ def math_evaluation():
     config = EvaluationConfig(
         dataset_name="math",
         data_path="hugginggpt/dataset/math_test.jsonl",
-        max_samples=100,
+        max_samples=1,
         save_intermediate=True,
         output_dir="results/math/math"
     )
@@ -50,7 +50,7 @@ def aime_evaluation():
     config = EvaluationConfig(
         dataset_name="aime",
         data_path="hugginggpt/dataset/aime_test.jsonl", 
-        max_samples=30,
+        max_samples=1,
         save_intermediate=True,
         output_dir="results/aime/aime"
     )
@@ -73,7 +73,7 @@ def drop_evaluation():
     config = EvaluationConfig(
         dataset_name="drop",
         data_path="hugginggpt/dataset/drop_test.jsonl",
-        max_samples=100,
+        max_samples=1,
         save_intermediate=True,
         output_dir="results/drop/drop"
     )
@@ -96,7 +96,7 @@ def mmlu_evaluation():
     config = EvaluationConfig(
         dataset_name="mmlu_pro",
         data_path="hugginggpt/dataset/mmlu_pro_test.jsonl",
-        max_samples=100,
+        max_samples=1,
         save_intermediate=True,
         output_dir="results/mmlu/mmlu"
     )
@@ -118,7 +118,7 @@ def bbh_evaluation():
     config = EvaluationConfig(
         dataset_name="bbh",
         data_path="hugginggpt/dataset/bbh_test.jsonl",
-        max_samples=100,
+        max_samples=1,
         save_intermediate=True,
         output_dir="results/bbh/bbh"
     )
@@ -140,7 +140,7 @@ def humaneval_evaluation():
     config = EvaluationConfig(
         dataset_name="humaneval",
         data_path="hugginggpt/dataset/humaneval_test.jsonl",
-        max_samples=100,
+        max_samples=1,
         save_intermediate=True,
         output_dir="results/humaneval/humaneval",
         random_sample=True
@@ -155,12 +155,12 @@ def main():
     logging.basicConfig(level=logging.INFO)
     
     try:
-        # math_evaluation()
+         math_evaluation()
         # aime_evaluation()
         # drop_evaluation()
         # mmlu_evaluation()
         # bbh_evaluation()
-         humaneval_evaluation()
+        # humaneval_evaluation()
     except Exception as e:
         print(f"Example run failed: {e}")
         logging.error(f"Example run failed: {e}", exc_info=True)

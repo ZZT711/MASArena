@@ -9,7 +9,9 @@ from dataclasses import dataclass
 import os
 from langchain.llms.base import LLM
 from langchain_core.tools import BaseTool
+from dotenv import load_dotenv
 
+load_dotenv(override=True)
 
 @dataclass
 class LLMConfig:
@@ -18,8 +20,8 @@ class LLMConfig:
     temperature: float = 0.0
     max_tokens: int = 2048
     timeout: int = 60
-    api_key: Optional[str] = ""
-    api_base: Optional[str] = ""
+    api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
+    api_base: Optional[str] = os.getenv("OPENAI_API_BASE")
 
 
 @dataclass
