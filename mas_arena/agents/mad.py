@@ -44,7 +44,7 @@ class DebateAgent:
         """Add generated response to memory"""
         self.memory_lst.append({"role": "assistant", "content": memory})
 
-    def ask(self):
+    async def ask(self):
         """Query and get response"""
         from langchain_core.messages import AIMessage
         
@@ -57,7 +57,7 @@ class DebateAgent:
             elif msg["role"] == "assistant":
                 messages.append(AIMessage(content=msg["content"]))
         
-        response = self.llm.invoke(messages)
+        response = await self.llm.ainvoke(messages)
         response.name = self.name
         response.id = self.agent_id
         return response
@@ -76,7 +76,7 @@ class ResultExtractor:
         )
         self.name = "result_extractor"
     
-    def extract(self, agent_histories: List[List[Dict]], problem_text: str):
+    async def extract(self, agent_histories: List[List[Dict]], problem_text: str):
         """Extract final answer from agent history"""
         # Build extraction prompt
         extract_prompt = f"""Based on the debate history, please extract the final answer to the following problem:
@@ -88,7 +88,7 @@ Problem: {problem_text}
 Please provide only the final answer."""
         
         messages = [HumanMessage(content=extract_prompt)]
-        response = self.llm.invoke(messages)
+        response = await self.llm.ainvoke(messages)
         return {"message": response}
 
 class MADAgent(AgentSystem):
@@ -188,19 +188,19 @@ class MADAgent(AgentSystem):
         
         # First round debate
         affirmative.add_event(config['affirmative_prompt'])
-        aff_response = affirmative.ask()
+        aff_response = await affirmative.ask()
         affirmative.add_memory(aff_response.content)
         all_messages.append(aff_response)
         aff_ans = aff_response.content
         
         negative.add_event(config['negative_prompt'].replace('##aff_ans##', aff_ans))
-        neg_response = negative.ask()
+        neg_response = await negative.ask()
         negative.add_memory(neg_response.content)
         all_messages.append(neg_response)
         neg_ans = neg_response.content
         
         moderator.add_event(config['moderator_prompt'].replace('##aff_ans##', aff_ans).replace('##neg_ans##', neg_ans).replace('##round##', 'first'))
-        mod_response = moderator.ask()
+        mod_response = await moderator.ask()
         moderator.add_memory(mod_response.content)
         all_messages.append(mod_response)
         
@@ -215,19 +215,19 @@ class MADAgent(AgentSystem):
                 break
                 
             affirmative.add_event(config['debate_prompt'].replace('##oppo_ans##', neg_ans))
-            aff_response = affirmative.ask()
+            aff_response = await affirmative.ask()
             affirmative.add_memory(aff_response.content)
             all_messages.append(aff_response)
             aff_ans = aff_response.content
             
             negative.add_event(config['debate_prompt'].replace('##oppo_ans##', aff_ans))
-            neg_response = negative.ask()
+            neg_response = await negative.ask()
             negative.add_memory(neg_response.content)
             all_messages.append(neg_response)
             neg_ans = neg_response.content
             
             moderator.add_event(config['moderator_prompt'].replace('##aff_ans##', aff_ans).replace('##neg_ans##', neg_ans).replace('##round##', self.round_dct(round_num)))
-            mod_response = moderator.ask()
+            mod_response = await moderator.ask()
             moderator.add_memory(mod_response.content)
             all_messages.append(mod_response)
             
@@ -236,7 +236,7 @@ class MADAgent(AgentSystem):
             except:
                 mod_ans = {"debate_answer": "", "Whether there is a preference": "No"}
         
-        # If no consensus reached, use judge
+        # If still no consensus, use judge
         final_answer = mod_ans.get("debate_answer", "")
         if not final_answer:
             judge = DebateAgent(
@@ -249,13 +249,13 @@ class MADAgent(AgentSystem):
             
             # Get final answer candidates
             judge.add_event(config['judge_prompt_last1'].replace('##aff_ans##', aff_ans).replace('##neg_ans##', neg_ans))
-            judge_response1 = judge.ask()
+            judge_response1 = await judge.ask()
             judge.add_memory(judge_response1.content)
             all_messages.append(judge_response1)
             
             # Select final answer
             judge.add_event(config['judge_prompt_last2'])
-            judge_response2 = judge.ask()
+            judge_response2 = await judge.ask()
             judge.add_memory(judge_response2.content)
             all_messages.append(judge_response2)
             
