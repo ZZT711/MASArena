@@ -62,35 +62,6 @@ class DebateAgent:
         response.id = self.agent_id
         return response
 
-@dataclass
-class ResultExtractor:
-    """Result extractor"""
-    model_name: str
-    format_prompt: str = ""
-    
-    def __post_init__(self):
-        self.llm = ChatOpenAI(
-            model=self.model_name,
-            request_timeout=60,
-            max_retries=2
-        )
-        self.name = "result_extractor"
-    
-    async def extract(self, agent_histories: List[List[Dict]], problem_text: str):
-        """Extract final answer from agent history"""
-        # Build extraction prompt
-        extract_prompt = f"""Based on the debate history, please extract the final answer to the following problem:
-
-Problem: {problem_text}
-
-{self.format_prompt}
-
-Please provide only the final answer."""
-        
-        messages = [HumanMessage(content=extract_prompt)]
-        response = await self.llm.ainvoke(messages)
-        return {"message": response}
-
 class MADAgent(AgentSystem):
     """Multi-Agent Debate system"""
     
@@ -108,23 +79,18 @@ class MADAgent(AgentSystem):
             "base_answer": "",
             "debate_answer": "",
             "player_meta_prompt": "You are a debater. Hello and welcome to the debate. It's not necessary to fully agree with each other's perspectives, as our objective is to find the correct answer.\nThe debate topic is stated as follows:\n##debate_topic##",
-            "moderator_meta_prompt": "You are a moderator. There will be two debaters involved in a debate. They will present their answers and discuss their perspectives on the following topic: \"##debate_topic##\"\nAt the end of each round, you will evaluate answers and decide which is correct.",
+            "moderator_meta_prompt": "You are a moderator. There will be two debaters involved in a debate. They will present their answers and discuss their perspectives on the following topic: \"##debate_topic##\"\nAt the end of each round, you will evaluate answers and decide which is correct.make sure the final answer in the format: {self.format_prompt}",
             "affirmative_prompt": "##debate_topic##",
             "negative_prompt": "##aff_ans##\n\nYou disagree with my answer. Provide your answer and reasons.",
             "moderator_prompt": "Now the ##round## round of debate for both sides has ended.\n\nAffirmative side arguing:\n##aff_ans##\n\nNegative side arguing: ##neg_ans##\n\nYou, as the moderator, will evaluate both sides' answers and determine if there is a clear preference for an answer candidate. If so, please summarize your reasons for supporting affirmative/negative side and give the final answer that you think is correct, and the debate will conclude. If not, the debate will continue to the next round. Now please output your answer in json format, with the format as follows: {\"Whether there is a preference\": \"Yes or No\", \"Supported Side\": \"Affirmative or Negative\", \"Reason\": \"\", \"debate_answer\": \"\"}. Please strictly output in JSON format, do not output irrelevant content.",
             "judge_prompt_last1": "Affirmative side arguing: ##aff_ans##\n\nNegative side arguing: ##neg_ans##\n\nNow, what answer candidates do we have? Present them without reasons.",
-            "judge_prompt_last2": "Therefore, ##debate_topic##\nPlease summarize your reasons and give the final answer that you think is correct. Now please output your answer in json format, with the format as follows: {\"Reason\": \"\", \"debate_answer\": \"\"}. Please strictly output in JSON format, do not output irrelevant content.",
-            "debate_prompt": "##oppo_ans##\n\nDo you agree with my perspective? Please provide your reasons and answer."
+            "judge_prompt_last2": "Therefore, ##debate_topic##\nPlease summarize your reasons and give the final answer that you think is correct. make sure the final answer in the format: {self.format_prompt}",
+            "debate_prompt": "##oppo_ans##\n\nDo you agree with my perspective? Please provide your reasons and answer. the debate_answer must be the final answer in the format: {self.format_prompt}"
         }
         
         # Initialize components
         agent_components = self._create_agents()
         self.players = [w for w in agent_components["workers"] if isinstance(w, DebateAgent)]
-        extractors = [w for w in agent_components["workers"] if isinstance(w, ResultExtractor)]
-        if extractors:
-            self.extractor = extractors[0]
-        else:
-            self.extractor = ResultExtractor(self.model_name, self.format_prompt)
 
     def _create_agents(self) -> Dict[str, List]:
         """Create debate participants and result extractor"""
@@ -139,12 +105,9 @@ class MADAgent(AgentSystem):
                 temperature=self.temperature
             )
             players.append(agent)
-        
-        # Create result extractor
-        extractor = ResultExtractor(self.model_name, self.format_prompt)
-        
+
         return {
-            "workers": players + [extractor]
+            "workers": players
         }
 
     def init_prompt(self, debate_topic: str):
@@ -259,11 +222,7 @@ class MADAgent(AgentSystem):
             judge.add_memory(judge_response2.content)
             all_messages.append(judge_response2)
             
-            try:
-                judge_ans = json.loads(judge_response2.content)
-                final_answer = judge_ans.get("debate_answer", judge_response2.content)
-            except:
-                final_answer = judge_response2.content
+            final_answer = judge_response2.content
         
         return {
             "messages": all_messages,
