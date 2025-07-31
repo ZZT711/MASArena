@@ -135,7 +135,9 @@ class MathEvaluator(BaseEvaluator):
             if self.is_digit(prediction) and self.is_digit(reference):
                 prediction_val = self.parse_digits(prediction)
                 reference_val = self.parse_digits(reference)
-                return isclose(prediction_val, reference_val, abs_tol=1e-3)
+                # Check if both values are not None before using isclose
+                if prediction_val is not None and reference_val is not None:
+                    return isclose(prediction_val, reference_val, abs_tol=1e-3)
         except ValueError:
             pass
 
@@ -149,11 +151,32 @@ class MathEvaluator(BaseEvaluator):
 
     def is_digit(self, num):
         """Check if a string can be parsed as a number"""
+        num = str(num)
+        
+        # Handle numbers with commas (like {14{,}916})
+        comma_pattern = r'\{(\d+)\{,\}(\d+)\}'
+        if re.search(comma_pattern, num):
+            num = re.sub(comma_pattern, r'\1\2', num)
+        elif "{,}" in num:
+            num = num.replace("{,}", "")
+            
+        print("parse_digits:", num)
         return self.parse_digits(num) is not None
 
     def parse_digits(self, num):
         """Parse a string as a number, handling percentage and commas"""
-        num = str(num).replace(",", "")
+        num = str(num)
+        
+        # Handle numbers with commas (like {14{,}916})
+        comma_pattern = r'\{(\d+)\{,\}(\d+)\}'
+        if re.search(comma_pattern, num):
+            num = re.sub(comma_pattern, r'\1\2', num)
+        elif "{,}" in num:
+            num = num.replace("{,}", "")
+        
+        # Handle simple commas
+        num = num.replace(",", "")
+        
         try:
             return float(num)
         except ValueError:
@@ -167,18 +190,62 @@ class MathEvaluator(BaseEvaluator):
                     pass
         return None
 
+    def latex_to_sympy(self, latex_str):
+        """Convert LaTeX to SymPy expression"""
+        latex_str = str(latex_str).strip()
+        
+        # Handle common LaTeX patterns
+        # Remove outer braces
+        if latex_str.startswith('{') and latex_str.endswith('}'):
+            latex_str = latex_str[1:-1]
+        
+        # Handle fractions
+        frac_pattern = r'\\frac\{([^}]+)\}\{([^}]+)\}'
+        if re.search(frac_pattern, latex_str):
+            latex_str = re.sub(frac_pattern, r'(\1)/(\2)', latex_str)
+        
+        # Handle dfrac (same as frac)
+        dfrac_pattern = r'\\dfrac\{([^}]+)\}\{([^}]+)\}'
+        if re.search(dfrac_pattern, latex_str):
+            latex_str = re.sub(dfrac_pattern, r'(\1)/(\2)', latex_str)
+        
+        # Handle numbers with commas (like {14{,}916})
+        comma_pattern = r'\{(\d+)\{,\}(\d+)\}'
+        if re.search(comma_pattern, latex_str):
+            latex_str = re.sub(comma_pattern, r'\1\2', latex_str)
+        
+        # Handle simple numbers in braces
+        num_brace_pattern = r'\{(\d+)\}'
+        if re.search(num_brace_pattern, latex_str):
+            latex_str = re.sub(num_brace_pattern, r'\1', latex_str)
+        
+        return latex_str
+
     def symbolic_equal(self, a, b):
         """Check symbolic equality using SymPy"""
         def _parse(s):
-            for f in [parse_latex, parse_expr]:
-                try:
-                    return f(s)
-                except Exception:
-                    pass
+            s_str = str(s)
+            
+            # Try to parse as LaTeX first
+            try:
+                latex_converted = self.latex_to_sympy(s_str)
+                return parse_expr(latex_converted)
+            except Exception:
+                pass
+            
+            # Try direct parsing
+            try:
+                return parse_expr(s_str)
+            except Exception as e:
+                print("error:", str(e))
+                pass
+            
             return s
 
         a = _parse(a)
         b = _parse(b)
+        print("a:", a)
+        print("b:", b)
 
         try:
             if simplify(a - b) == 0:
@@ -266,7 +333,7 @@ class MathEvaluator(BaseEvaluator):
         # Extract the final answer from messages
         all_messages = run_result.get("messages", [])
         final_answer = self.extract_final_answer(all_messages)
-        
+
         if self.evaluate_type == 0:
             # Use the new calculate_score method
             score, extracted_answer = self.simple_calculate_score(problem["solution"], final_answer)
@@ -284,3 +351,15 @@ class MathEvaluator(BaseEvaluator):
             "score": score,
             "extracted_answer": extracted_answer
         }
+    
+if __name__ == "__main__":
+    evaluator = MathEvaluator("math")
+    data_1 = "{\frac{1}{2}}"
+    data_2 = "1/2"
+    data_3 = "{\dfrac{1}{2}}"
+    print(data_1)
+    print(data_2)
+    print(data_3)
+    print(evaluator.math_equal(data_1, data_2))
+    print(evaluator.math_equal(data_1, data_3))
+    print(evaluator.math_equal(data_2, data_3))
