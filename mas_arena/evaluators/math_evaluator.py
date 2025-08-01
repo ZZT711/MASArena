@@ -160,7 +160,6 @@ class MathEvaluator(BaseEvaluator):
         elif "{,}" in num:
             num = num.replace("{,}", "")
             
-        print("parse_digits:", num)
         return self.parse_digits(num) is not None
 
     def parse_digits(self, num):
@@ -244,8 +243,6 @@ class MathEvaluator(BaseEvaluator):
 
         a = _parse(a)
         b = _parse(b)
-        print("a:", a)
-        print("b:", b)
 
         try:
             if simplify(a - b) == 0:
@@ -352,14 +349,3 @@ class MathEvaluator(BaseEvaluator):
             "extracted_answer": extracted_answer
         }
     
-if __name__ == "__main__":
-    evaluator = MathEvaluator("math")
-    data_1 = "{\frac{1}{2}}"
-    data_2 = "1/2"
-    data_3 = "{\dfrac{1}{2}}"
-    print(data_1)
-    print(data_2)
-    print(data_3)
-    print(evaluator.math_equal(data_1, data_2))
-    print(evaluator.math_equal(data_1, data_3))
-    print(evaluator.math_equal(data_2, data_3))
