@@ -189,71 +189,127 @@ class MathEvaluator(BaseEvaluator):
                     pass
         return None
 
-    def latex_to_sympy(self, latex_str):
-        """Convert LaTeX to SymPy expression"""
+    def latex_to_sympy(self, latex_str: str):
+        """
+        Convert a LaTeX string to a SymPy-parsable expression.
+        This function handles various LaTeX commands and environments to make the string
+        compatible with SymPy's parser.
+        """
         latex_str = str(latex_str).strip()
-        
-        # Handle common LaTeX patterns
-        # Remove outer braces
-        if latex_str.startswith('{') and latex_str.endswith('}'):
-            latex_str = latex_str[1:-1]
-        
+
+        # Handle matrix/vector environments by extracting their content
+        pmatrix_match = re.search(r'\\begin{pmatrix}(.*?)\\end{pmatrix}', latex_str, re.DOTALL)
+        if pmatrix_match:
+            content = pmatrix_match.group(1).strip()
+            # Split by \\ and & and filter out empty strings
+            elements = [elem.strip() for elem in re.split(r'\\\\|&', content) if elem.strip()]
+            return f"({', '.join(elements)})"
+
+        # Remove other environments
+        latex_str = re.sub(r'\\begin{asy}.*?\\end{asy}', '', latex_str, flags=re.DOTALL)
+        latex_str = re.sub(r'\\begin{tabular}.*?\\end{tabular}', '', latex_str, flags=re.DOTALL)
+        latex_str = re.sub(r'\\begin{align\*}.*?\\end{align\*}', '', latex_str, flags=re.DOTALL)
+        latex_str = re.sub(r'\\begin{align}.*?\\end{align}', '', latex_str, flags=re.DOTALL)
+
+        # Handle \boxed{}
+        match = re.search(r'\\boxed{(.*)}', latex_str)
+        if match:
+            latex_str = match.group(1)
+
+        # Remove text commands
+        latex_str = re.sub(r'\\text(normal)?\{.*?\}', '', latex_str)
+        latex_str = re.sub(r'\\textit\{.*?\}', '', latex_str)
+
         # Handle fractions
-        frac_pattern = r'\\frac\{([^}]+)\}\{([^}]+)\}'
-        if re.search(frac_pattern, latex_str):
-            latex_str = re.sub(frac_pattern, r'(\1)/(\2)', latex_str)
+        latex_str = re.sub(r'\\(d)?frac\{([^}]+)\}\{([^}]+)\}', r'((\2)/(\3))', latex_str)
         
-        # Handle dfrac (same as frac)
-        dfrac_pattern = r'\\dfrac\{([^}]+)\}\{([^}]+)\}'
-        if re.search(dfrac_pattern, latex_str):
-            latex_str = re.sub(dfrac_pattern, r'(\1)/(\2)', latex_str)
+        # Replacements for known LaTeX commands
+        replacements = {
+            r'\sin': 'sin', r'\cos': 'cos', r'\tan': 'tan',
+            r'\log': 'log', r'\ln': 'ln',
+            r'\sqrt': 'sqrt', r'\pi': 'pi',
+            r'\left': '', r'\right': '',
+            r'\cdot': '*', r'\times': '*',
+            r'\%': '/100',
+            r'^{\circ}': '', r'^\circ': '',
+            r'\$': '', r'\\,': '', r'\\!': '', r'\\#': '',
+            r'\allowbreak': ''
+        }
+        for old, new in replacements.items():
+            latex_str = latex_str.replace(old, new)
         
-        # Handle numbers with commas (like {14{,}916})
-        comma_pattern = r'\{(\d+)\{,\}(\d+)\}'
-        if re.search(comma_pattern, latex_str):
-            latex_str = re.sub(comma_pattern, r'\1\2', latex_str)
+        # Remove any other LaTeX commands that are just names
+        latex_str = re.sub(r'\\[a-zA-Z]+', '', latex_str)
         
-        # Handle simple numbers in braces
-        num_brace_pattern = r'\{(\d+)\}'
-        if re.search(num_brace_pattern, latex_str):
-            latex_str = re.sub(num_brace_pattern, r'\1', latex_str)
+        # remove subscripts like _{...} or _b
+        latex_str = re.sub(r'(_\{.*?\}|_b)', '', latex_str)
+
+        # Handle numbers with commas
+        latex_str = re.sub(r'(\d),(\d)', r'\1\2', latex_str)
+
+        # Handle repeating decimals
+        overline_match = re.search(r'(\d+)\.\\overline\{(\d+)\}', latex_str)
+        if overline_match:
+            integer_part = overline_match.group(1)
+            repeating_part = overline_match.group(2)
+            num = int(integer_part + repeating_part) - int(integer_part)
+            den = 10**len(repeating_part) - 1
+            latex_str = f'({num}/{den})'
         
-        return latex_str
+        overline_match = re.search(r'0\.\\overline\{(\d+)\}', latex_str)
+        if overline_match:
+            repeating_part = overline_match.group(1)
+            latex_str = f'({repeating_part}/(10**{len(repeating_part)}-1))'
+            
+        # Final cleanup of braces and backslashes
+        latex_str = latex_str.replace('{', '(').replace('}', ')').replace('\\', '').replace(' ', '')
+        
+        # Cleanup mismatched parentheses
+        while '()' in latex_str:
+            latex_str = latex_str.replace('()', '')
+            
+        return latex_str.strip()
 
     def symbolic_equal(self, a, b):
         """Check symbolic equality using SymPy"""
         def _parse(s):
-            s_str = str(s)
-            
-            # Try to parse as LaTeX first
+            s_str = str(s).strip()
+            if not s_str:
+                return None
+
             try:
                 latex_converted = self.latex_to_sympy(s_str)
+                if not latex_converted:
+                    return None
                 return parse_expr(latex_converted)
             except Exception:
+                # Fallback to direct parsing if latex conversion fails
                 pass
             
-            # Try direct parsing
             try:
                 return parse_expr(s_str)
-            except Exception as e:
-                print("error:", str(e))
-                pass
-            
-            return s
+            except Exception:
+                return None
 
-        a = _parse(a)
-        b = _parse(b)
+        a_parsed = _parse(a)
+        b_parsed = _parse(b)
+
+        if a_parsed is None or b_parsed is None:
+            return False
 
         try:
-            if simplify(a - b) == 0:
+            # Simplify the difference
+            if simplify(a_parsed - b_parsed) == 0:
                 return True
         except Exception:
             pass
 
         try:
-            if isclose(N(a), N(b), abs_tol=1e-3):
+            # Numerical evaluation
+            if isclose(N(a_parsed), N(b_parsed), abs_tol=1e-3):
                 return True
-        except Exception:
+        except (TypeError, ValueError, Exception):
+            # This can fail if expressions are not numeric
             pass
 
         return False
