@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from mas_arena.agents.base import AgentSystem, AgentSystemRegistry
 
-load_dotenv()
+load_dotenv(override=True)
 
 @dataclass
 class DebateAgent:
@@ -75,18 +75,19 @@ class MADAgent(AgentSystem):
         
         # Debate configuration
         self.debate_config = {
-            "debate_topic": "",
-            "base_answer": "",
-            "debate_answer": "",
-            "player_meta_prompt": "You are a debater. Hello and welcome to the debate. It's not necessary to fully agree with each other's perspectives, as our objective is to find the correct answer.\nThe debate topic is stated as follows:\n##debate_topic##",
-            "moderator_meta_prompt": "You are a moderator. There will be two debaters involved in a debate. They will present their answers and discuss their perspectives on the following topic: \"##debate_topic##\"\nAt the end of each round, you will evaluate answers and decide which is correct.make sure the final answer in the format: {self.format_prompt}",
-            "affirmative_prompt": "##debate_topic##",
-            "negative_prompt": "##aff_ans##\n\nYou disagree with my answer. Provide your answer and reasons.",
-            "moderator_prompt": "Now the ##round## round of debate for both sides has ended.\n\nAffirmative side arguing:\n##aff_ans##\n\nNegative side arguing: ##neg_ans##\n\nYou, as the moderator, will evaluate both sides' answers and determine if there is a clear preference for an answer candidate. If so, please summarize your reasons for supporting affirmative/negative side and give the final answer that you think is correct, and the debate will conclude. If not, the debate will continue to the next round. Now please output your answer in json format, with the format as follows: {\"Whether there is a preference\": \"Yes or No\", \"Supported Side\": \"Affirmative or Negative\", \"Reason\": \"\", \"debate_answer\": \"\"}. Please strictly output in JSON format, do not output irrelevant content.",
-            "judge_prompt_last1": "Affirmative side arguing: ##aff_ans##\n\nNegative side arguing: ##neg_ans##\n\nNow, what answer candidates do we have? Present them without reasons.",
-            "judge_prompt_last2": "Therefore, ##debate_topic##\nPlease summarize your reasons and give the final answer that you think is correct. make sure the final answer in the format: {self.format_prompt}",
-            "debate_prompt": "##oppo_ans##\n\nDo you agree with my perspective? Please provide your reasons and answer. the debate_answer must be the final answer in the format: {self.format_prompt}"
-        }
+            
+    "debate_topic": "",
+    "base_answer": "",
+    "debate_answer": "",
+    "player_meta_prompt": "You are a debater. Hello and welcome to the debate. It's not necessary to fully agree with each other's perspectives, as our objective is to find the correct answer.\nThe debate topic is stated as follows:\n##debate_topic##",
+    "moderator_meta_prompt": "You are a moderator overseeing a debate on the topic: \"##debate_topic##\". Your role is to evaluate arguments and determine the correct answer. **IMPORTANT: You must output your decision in a strict JSON format. The final answer within the JSON must EXACTLY follow the format: {format_prompt}. All backslashes in the answer must be escaped (e.g., use `\\\\` for a single backslash).**",
+    "affirmative_prompt": "##debate_topic##",
+    "negative_prompt": "##aff_ans##\n\nYou disagree with my answer. Provide your answer and reasons.",
+    "moderator_prompt": "Now the ##round## round of debate for both sides has ended.\n\nAffirmative side arguing:\n##aff_ans##\n\nNegative side arguing: ##neg_ans##\n\nYou, as the moderator, will evaluate both sides' answers. If a clear preference emerges, summarize your reasons, declare the supported side, and provide the final correct answer. If not, the debate continues. **Please output your decision strictly in JSON format as follows, with no additional text: {{\"Whether there is a preference\": \"Yes or No\", \"Supported Side\": \"Affirmative or Negative\", \"Reason\": \"Your reason here.\", \"debate_answer\": \"The final answer here, escaping backslashes.\"}}**",
+    "judge_prompt_last1": "Affirmative side arguing: ##aff_ans##\n\nNegative side arguing: ##neg_ans##\n\nNow, what answer candidates do we have? Present them without reasons.",
+    "judge_prompt_last2": "Therefore, ##debate_topic##\nPlease summarize your reasons and give the final answer that you think is correct. **IMPORTANT: You must output your decision in a strict JSON format as follows, with no additional text: {{\"Whether there is a preference\": \"Yes\", \"Supported Side\": \"Affirmative or Negative based on your judgement\", \"Reason\": \"Your reason here.\", \"debate_answer\": \"The final answer here, escaping backslashes.\"}}**",
+    "debate_prompt": "##oppo_ans##\n\nDo you agree with my perspective? Provide your reasons and your answer. **IMPORTANT: The debate_answer must EXACTLY follow the format: {format_prompt}.** The latex format requires **two backslashes to be output**"
+    }
         
         # Initialize components
         agent_components = self._create_agents()
@@ -128,6 +129,7 @@ class MADAgent(AgentSystem):
 
     async def run_agent(self, problem: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """Run debate process"""
+        
         problem_text = problem["problem"]
         
         # Store all LLM responses
@@ -143,6 +145,11 @@ class MADAgent(AgentSystem):
         affirmative = self.players[0]
         negative = self.players[1] 
         moderator = self.players[2]
+        
+        # Clear memory for each agent to prevent context overflow
+        affirmative.memory_lst.clear()
+        negative.memory_lst.clear()
+        moderator.memory_lst.clear()
         
         # Set meta prompts
         affirmative.set_meta_prompt(config['player_meta_prompt'])
