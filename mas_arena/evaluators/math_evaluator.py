@@ -3,15 +3,13 @@ Math Evaluator
 
 This module provides a standalone evaluator for mathematical problems.
 """
-import asyncio
 import re
 import time
-from typing import Dict, Any, Optional, List, Callable, Tuple
+from typing import Dict, Any, Optional, List, Tuple
 from pathlib import Path
 from math import isclose
 
 from sympy import N, simplify
-from sympy.parsing.latex import parse_latex
 from sympy.parsing.sympy_parser import parse_expr
 from langsmith.evaluation import RunEvaluator
 from langsmith.schemas import Run
@@ -19,9 +17,6 @@ from langsmith.schemas import Run
 from mas_arena.evaluators.base_evaluator import BaseEvaluator
 from mas_arena.evaluators.registry import register_benchmark
 from mas_arena.evaluators.utils.math_equal import calculate_score
-from mas_arena.evaluators.utils.normalization import normalize_problem_keys
-
-# change
 
 @register_benchmark(
     name="math",
@@ -31,7 +26,6 @@ from mas_arena.evaluators.utils.normalization import normalize_problem_keys
         "solution": "solution",
     }
 )
-
 class MathEvaluator(BaseEvaluator):
     """
     Math Evaluator for evaluating math problems.

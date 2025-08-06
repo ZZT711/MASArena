@@ -5,7 +5,6 @@ Standalone evaluator for AIME-style math problems.
 """
 
 
-import time
 from typing import Dict, Any
 from pathlib import Path
 
