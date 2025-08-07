@@ -3,15 +3,13 @@ Math Evaluator
 
 This module provides a standalone evaluator for mathematical problems.
 """
-import asyncio
 import re
 import time
-from typing import Dict, Any, Optional, List, Callable, Tuple
+from typing import Dict, Any, Optional, List, Tuple
 from pathlib import Path
 from math import isclose
 
 from sympy import N, simplify
-from sympy.parsing.latex import parse_latex
 from sympy.parsing.sympy_parser import parse_expr
 from langsmith.evaluation import RunEvaluator
 from langsmith.schemas import Run
@@ -19,9 +17,6 @@ from langsmith.schemas import Run
 from mas_arena.evaluators.base_evaluator import BaseEvaluator
 from mas_arena.evaluators.registry import register_benchmark
 from mas_arena.evaluators.utils.math_equal import calculate_score
-from mas_arena.evaluators.utils.normalization import normalize_problem_keys
-
-# change
 
 @register_benchmark(
     name="math",
@@ -31,7 +26,6 @@ from mas_arena.evaluators.utils.normalization import normalize_problem_keys
         "solution": "solution",
     }
 )
-
 class MathEvaluator(BaseEvaluator):
     """
     Math Evaluator for evaluating math problems.
@@ -135,7 +129,9 @@ class MathEvaluator(BaseEvaluator):
             if self.is_digit(prediction) and self.is_digit(reference):
                 prediction_val = self.parse_digits(prediction)
                 reference_val = self.parse_digits(reference)
-                return isclose(prediction_val, reference_val, abs_tol=1e-3)
+                # Check if both values are not None before using isclose
+                if prediction_val is not None and reference_val is not None:
+                    return isclose(prediction_val, reference_val, abs_tol=1e-3)
         except ValueError:
             pass
 
@@ -149,11 +145,31 @@ class MathEvaluator(BaseEvaluator):
 
     def is_digit(self, num):
         """Check if a string can be parsed as a number"""
+        num = str(num)
+        
+        # Handle numbers with commas (like {14{,}916})
+        comma_pattern = r'\{(\d+)\{,\}(\d+)\}'
+        if re.search(comma_pattern, num):
+            num = re.sub(comma_pattern, r'\1\2', num)
+        elif "{,}" in num:
+            num = num.replace("{,}", "")
+            
         return self.parse_digits(num) is not None
 
     def parse_digits(self, num):
         """Parse a string as a number, handling percentage and commas"""
-        num = str(num).replace(",", "")
+        num = str(num)
+        
+        # Handle numbers with commas (like {14{,}916})
+        comma_pattern = r'\{(\d+)\{,\}(\d+)\}'
+        if re.search(comma_pattern, num):
+            num = re.sub(comma_pattern, r'\1\2', num)
+        elif "{,}" in num:
+            num = num.replace("{,}", "")
+        
+        # Handle simple commas
+        num = num.replace(",", "")
+        
         try:
             return float(num)
         except ValueError:
@@ -167,29 +183,127 @@ class MathEvaluator(BaseEvaluator):
                     pass
         return None
 
+    def latex_to_sympy(self, latex_str: str):
+        """
+        Convert a LaTeX string to a SymPy-parsable expression.
+        This function handles various LaTeX commands and environments to make the string
+        compatible with SymPy's parser.
+        """
+        latex_str = str(latex_str).strip()
+
+        # Handle matrix/vector environments by extracting their content
+        pmatrix_match = re.search(r'\\begin{pmatrix}(.*?)\\end{pmatrix}', latex_str, re.DOTALL)
+        if pmatrix_match:
+            content = pmatrix_match.group(1).strip()
+            # Split by \\ and & and filter out empty strings
+            elements = [elem.strip() for elem in re.split(r'\\\\|&', content) if elem.strip()]
+            return f"({', '.join(elements)})"
+
+        # Remove other environments
+        latex_str = re.sub(r'\\begin{asy}.*?\\end{asy}', '', latex_str, flags=re.DOTALL)
+        latex_str = re.sub(r'\\begin{tabular}.*?\\end{tabular}', '', latex_str, flags=re.DOTALL)
+        latex_str = re.sub(r'\\begin{align\*}.*?\\end{align\*}', '', latex_str, flags=re.DOTALL)
+        latex_str = re.sub(r'\\begin{align}.*?\\end{align}', '', latex_str, flags=re.DOTALL)
+
+        # Handle \boxed{}
+        match = re.search(r'\\boxed{(.*)}', latex_str)
+        if match:
+            latex_str = match.group(1)
+
+        # Remove text commands
+        latex_str = re.sub(r'\\text(normal)?\{.*?\}', '', latex_str)
+        latex_str = re.sub(r'\\textit\{.*?\}', '', latex_str)
+
+        # Handle fractions
+        latex_str = re.sub(r'\\(d)?frac\{([^}]+)\}\{([^}]+)\}', r'((\2)/(\3))', latex_str)
+        
+        # Replacements for known LaTeX commands
+        replacements = {
+            r'\sin': 'sin', r'\cos': 'cos', r'\tan': 'tan',
+            r'\log': 'log', r'\ln': 'ln',
+            r'\sqrt': 'sqrt', r'\pi': 'pi',
+            r'\left': '', r'\right': '',
+            r'\cdot': '*', r'\times': '*',
+            r'\%': '/100',
+            r'^{\circ}': '', r'^\circ': '',
+            r'\$': '', r'\\,': '', r'\\!': '', r'\\#': '',
+            r'\allowbreak': ''
+        }
+        for old, new in replacements.items():
+            latex_str = latex_str.replace(old, new)
+        
+        # Remove any other LaTeX commands that are just names
+        latex_str = re.sub(r'\\[a-zA-Z]+', '', latex_str)
+        
+        # remove subscripts like _{...} or _b
+        latex_str = re.sub(r'(_\{.*?\}|_b)', '', latex_str)
+
+        # Handle numbers with commas
+        latex_str = re.sub(r'(\d),(\d)', r'\1\2', latex_str)
+
+        # Handle repeating decimals
+        overline_match = re.search(r'(\d+)\.\\overline\{(\d+)\}', latex_str)
+        if overline_match:
+            integer_part = overline_match.group(1)
+            repeating_part = overline_match.group(2)
+            num = int(integer_part + repeating_part) - int(integer_part)
+            den = 10**len(repeating_part) - 1
+            latex_str = f'({num}/{den})'
+        
+        overline_match = re.search(r'0\.\\overline\{(\d+)\}', latex_str)
+        if overline_match:
+            repeating_part = overline_match.group(1)
+            latex_str = f'({repeating_part}/(10**{len(repeating_part)}-1))'
+            
+        # Final cleanup of braces and backslashes
+        latex_str = latex_str.replace('{', '(').replace('}', ')').replace('\\', '').replace(' ', '')
+        
+        # Cleanup mismatched parentheses
+        while '()' in latex_str:
+            latex_str = latex_str.replace('()', '')
+            
+        return latex_str.strip()
+
     def symbolic_equal(self, a, b):
         """Check symbolic equality using SymPy"""
         def _parse(s):
-            for f in [parse_latex, parse_expr]:
-                try:
-                    return f(s)
-                except Exception:
-                    pass
-            return s
+            s_str = str(s).strip()
+            if not s_str:
+                return None
 
-        a = _parse(a)
-        b = _parse(b)
+            try:
+                latex_converted = self.latex_to_sympy(s_str)
+                if not latex_converted:
+                    return None
+                return parse_expr(latex_converted)
+            except Exception:
+                # Fallback to direct parsing if latex conversion fails
+                pass
+            
+            try:
+                return parse_expr(s_str)
+            except Exception:
+                return None
+
+        a_parsed = _parse(a)
+        b_parsed = _parse(b)
+
+        if a_parsed is None or b_parsed is None:
+            return False
 
         try:
-            if simplify(a - b) == 0:
+            # Simplify the difference
+            if simplify(a_parsed - b_parsed) == 0:
                 return True
         except Exception:
             pass
 
         try:
-            if isclose(N(a), N(b), abs_tol=1e-3):
+            # Numerical evaluation
+            if isclose(N(a_parsed), N(b_parsed), abs_tol=1e-3):
                 return True
-        except Exception:
+        except (TypeError, ValueError, Exception):
+            # This can fail if expressions are not numeric
             pass
 
         return False
@@ -266,7 +380,7 @@ class MathEvaluator(BaseEvaluator):
         # Extract the final answer from messages
         all_messages = run_result.get("messages", [])
         final_answer = self.extract_final_answer(all_messages)
-        
+
         if self.evaluate_type == 0:
             # Use the new calculate_score method
             score, extracted_answer = self.simple_calculate_score(problem["solution"], final_answer)
@@ -284,3 +398,4 @@ class MathEvaluator(BaseEvaluator):
             "score": score,
             "extracted_answer": extracted_answer
         }
+    
